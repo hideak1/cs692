@@ -63,7 +63,6 @@ def save_results(params_list, freeze_test_set=True):
         train_sentences, train_labels = random_sampling(all_train_sentences, all_train_labels, params['num_shots'])
 
         ### Get model's original answers
-        print(f'step1 prompts: {params}')
         all_responses_orig, all_prompts_orig = get_model_response(params, train_sentences, train_labels, test_sentences,
                                                         return_all_prompts=True, num_tokens_to_predict_override=5)
         all_orig_ans = []
@@ -72,10 +71,10 @@ def save_results(params_list, freeze_test_set=True):
         print(f'step1 answers: {all_orig_ans}')
         ### Get contextual-calibrated answer (first token)
         # ask model for candidate first token, for each of the test sentence
-        print(f'step2 prompts: {params}')
+        
         all_responses, all_prompts = get_model_response(params, train_sentences, train_labels, test_sentences,
                                                         return_all_prompts=True, num_tokens_to_predict_override=1)
-        print(f'step2 prompts: {all_responses}')
+        print(f'step2 answers: {all_responses}')
         # calculate calibration constant for each of the candidate token
         all_options = set()
         for resp in all_responses:
@@ -146,7 +145,7 @@ def save_results(params_list, freeze_test_set=True):
         ### Get contextual-calibrated answer (rest of tokens, greedy decode)
         for i in range(len(all_prompts)):
             all_prompts[i] += all_reweighted_ans[i]
-        print(f'step3 prompts: {params}')
+        
         all_responses_greedy, all_prompts = get_model_response(params, train_sentences, train_labels, test_sentences,
                                                         return_all_prompts=True, num_tokens_to_predict_override=5-1,
                                                         override_prompt=all_prompts)
