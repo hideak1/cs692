@@ -64,17 +64,17 @@ def save_results(params_list, freeze_test_set=True):
 
         ### Get model's original answers
         all_responses_orig, all_prompts_orig = get_model_response(params, train_sentences, train_labels, test_sentences,
-                                                        return_all_prompts=True, num_tokens_to_predict_override=100)
+                                                        return_all_prompts=True, num_tokens_to_predict_override=1024)
         all_orig_ans = []
         for resp in all_responses_orig:
             all_orig_ans.append(resp['text'])
-        print(f'step1 answers: {all_orig_ans}')
+        # print(f'step1 answers: {all_orig_ans}')
         ### Get contextual-calibrated answer (first token)
         # ask model for candidate first token, for each of the test sentence
         
         all_responses, all_prompts = get_model_response(params, train_sentences, train_labels, test_sentences,
-                                                        return_all_prompts=True, num_tokens_to_predict_override=100)
-        print(f'step2 answers: {all_responses}')
+                                                        return_all_prompts=True, num_tokens_to_predict_override=1)
+        # print(f'step2 answers: {all_responses}')
         # calculate calibration constant for each of the candidate token
         all_options = set()
         for resp in all_responses:
@@ -147,7 +147,7 @@ def save_results(params_list, freeze_test_set=True):
             all_prompts[i] += all_reweighted_ans[i]
         
         all_responses_greedy, all_prompts = get_model_response(params, train_sentences, train_labels, test_sentences,
-                                                        return_all_prompts=True, num_tokens_to_predict_override=100,
+                                                        return_all_prompts=True, num_tokens_to_predict_override=1024,
                                                         override_prompt=all_prompts)
         
         for i in range(len(all_reweighted_ans)):
