@@ -336,6 +336,27 @@ def load_advising():
 
     return train_questions, train_answers, test_questions, test_answers
 
+def load_geography():
+    train_questions = []
+    train_answers = []
+    test_questions = []
+    test_answers = []
+    with open("data/geography/geography.json", "r") as f:
+        jd = json.load(f)
+        for myjson in jd:
+            sentences = myjson['sentences']
+            sqls = myjson['sql']
+            for sentence in sentences:
+                for sql in sqls:
+                    if sentence['question-split'] == 'test':
+                        test_questions.append(sentence['text'])
+                        test_answers.append(sql)
+                    elif sentence['question-split'] == 'train':
+                        train_questions.append(sentence['text'])
+                        train_answers.append(sql)
+
+    return train_questions, train_answers, test_questions, test_answers
+
 def load_dataset(params):
     """
     Load train and test data
@@ -548,6 +569,32 @@ def load_dataset(params):
 
     elif params['dataset'] == 'advising':
         orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels = load_advising()
+        params['prompt_prefix'] = ""
+        params["q_prefix"] = ""
+        params["a_prefix"] = "answer: "
+        params['num_user_input'] = 2
+        params['task_format'] = 'qa'
+        params['num_tokens_to_predict'] = 1
+
+        def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            q_prefix = params["q_prefix"]
+            a_prefix = params["a_prefix"]
+
+            prompt = params['prompt_prefix']
+            for x, y in zip(train_sentences, train_labels):
+                prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+                prompt += "\n\n"
+
+            if test_label_option is None:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"[:-1]
+            else:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"[:-1] + test_label_option
+            return prompt
+
+        params['prompt_func'] = prompt_func
+
+    elif params['dataset'] == 'geography':
+        orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels = load_geography()
         params['prompt_prefix'] = ""
         params["q_prefix"] = ""
         params["a_prefix"] = "answer: "
