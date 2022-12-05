@@ -65,6 +65,7 @@ def setup_gpt2(model_name):
         gpt2_tokenizer.padding_side = "left"
         gpt2_tokenizer.pad_token = gpt2_tokenizer.eos_token
         gpt2_model.config.pad_token_id = gpt2_model.config.eos_token_id
+        gpt2_model.config.max_length = 4096
         print("Finished")
 
 def setup_gpt3():
