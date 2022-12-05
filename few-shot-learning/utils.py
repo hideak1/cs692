@@ -84,7 +84,7 @@ def complete_gpt2(prompt, l=10, model_name='gpt2-xl', num_log_probs=None, echo=F
     if l > 0:
         # the generate function can handle left padded inputs automatically in HF
         # total_sequences is now the input + possible generated output
-        total_sequences = gpt2_model.generate(input_ids=input_ids['input_ids'].cuda(), attention_mask=input_ids['attention_mask'].cuda(), max_length=1024, do_sample=False)
+        total_sequences = gpt2_model.generate(input_ids=input_ids['input_ids'].cuda(), attention_mask=input_ids['attention_mask'].cuda(), max_length=4096, do_sample=False)
     else:
         assert echo == True and l == 0
         total_sequences = input_ids['input_ids'].cuda()
