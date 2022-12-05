@@ -3,6 +3,8 @@ import json
 import pickle
 import numpy as np
 from utils import ROOT_DIR
+import sqlite3
+
 
 def load_sst2():
     def process_raw_data_sst(lines):
@@ -299,19 +301,28 @@ def load_rte():
 def load_academic():
     train_questions = []
     train_answers = []
+    test_questions = []
+    test_answers = []
     with open("data/academic/academic.json", "r") as f:
         jd = json.load(f)
         for myjson in jd:
-            q = myjson['sentences'][0]['text']
-            a = myjson['sql'][0]
-            train_answers.append(a)
-            train_questions.append('question: ' + q)
+            sentences = myjson['sentences']
+            variables = myjson['variables']
 
-    test_questions = train_questions[int((len(train_questions)+1)*.80):]
-    test_answers = train_answers[int((len(train_answers)+1)*.80):]
-
-    train_questions = train_questions[:int((len(train_questions)+1)*.80)]
-    train_answers = train_answers[:int((len(train_answers)+1)*.80)]
+            sqls = myjson['sql']
+            for sentence in sentences:
+                for sql in sqls:
+                    question = sentence['text']
+                    ans = sql
+                    for variable in variables:
+                        question = question.replace(variable['name'], sentence['variables'][variable['name']])
+                        ans = ans.replace(variable['name'], sentence['variables'][variable['name']])
+                    if sentence['question-split'] == 'test':
+                        test_questions.append(question)
+                        test_answers.append(ans)
+                    elif sentence['question-split'] == 'train':
+                        train_questions.append(question)
+                        train_answers.append(ans)
 
     return train_questions, train_answers, test_questions, test_answers
 
@@ -324,15 +335,22 @@ def load_advising():
         jd = json.load(f)
         for myjson in jd:
             sentences = myjson['sentences']
+            variables = myjson['variables']
+
             sqls = myjson['sql']
             for sentence in sentences:
                 for sql in sqls:
+                    question = sentence['text']
+                    ans = sql
+                    for variable in variables:
+                        question = question.replace(variable['name'], sentence['variables'][variable['name']])
+                        ans = ans.replace(variable['name'], sentence['variables'][variable['name']])
                     if sentence['question-split'] == 'test':
-                        test_questions.append(sentence['text'])
-                        test_answers.append(sql)
+                        test_questions.append(question)
+                        test_answers.append(ans)
                     elif sentence['question-split'] == 'train':
-                        train_questions.append(sentence['text'])
-                        train_answers.append(sql)
+                        train_questions.append(question)
+                        train_answers.append(ans)
 
     return train_questions, train_answers, test_questions, test_answers
 
@@ -345,17 +363,55 @@ def load_geography():
         jd = json.load(f)
         for myjson in jd:
             sentences = myjson['sentences']
+            variables = myjson['variables']
+
             sqls = myjson['sql']
             for sentence in sentences:
                 for sql in sqls:
+                    question = sentence['text']
+                    ans = sql
+                    for variable in variables:
+                        question = question.replace(variable['name'], sentence['variables'][variable['name']])
+                        ans = ans.replace(variable['name'], sentence['variables'][variable['name']])
                     if sentence['question-split'] == 'test':
-                        test_questions.append(sentence['text'])
-                        test_answers.append(sql)
+                        test_questions.append(question)
+                        test_answers.append(ans)
                     elif sentence['question-split'] == 'train':
-                        train_questions.append(sentence['text'])
-                        train_answers.append(sql)
+                        train_questions.append(question)
+                        train_answers.append(ans)
 
     return train_questions, train_answers, test_questions, test_answers
+
+def load_cmput291():
+    train_questions = []
+    train_answers = []
+    test_questions = []
+    test_answers = []
+    tag_map = {}
+    with open("data/cmput291/cmput291.json", "r") as f:
+        jd = json.load(f)
+        for myjson in jd:
+            sentences = myjson['sentences']
+            variables = myjson['variables']
+
+            sqls = myjson['sql']
+            tag = myjson['tag']
+            for sentence in sentences:
+                for sql in sqls:
+                    question = sentence['text']
+                    ans = sql
+                    for variable in variables:
+                        question = question.replace(variable['name'], sentence['variables'][variable['name']])
+                        ans = ans.replace(variable['name'], sentence['variables'][variable['name']])
+                    if sentence['question-split'] == 'test':
+                        test_questions.append(question)
+                        test_answers.append(ans)
+                        tag_map[question] = tag
+                    elif sentence['question-split'] == 'train':
+                        train_questions.append(question)
+                        train_answers.append(ans)
+
+    return train_questions, train_answers, test_questions, test_answers, tag_map
 
 def load_dataset(params):
     """
@@ -596,28 +652,126 @@ def load_dataset(params):
     elif params['dataset'] == 'geography':
         orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels = load_geography()
         params['prompt_prefix'] = ""
-        params["q_prefix"] = ""
-        params["a_prefix"] = "answer: "
+        params["q_prefix"] = "QUESTION: "
+        params["a_prefix"] = "ANSWER:"
         params['num_user_input'] = 2
         params['task_format'] = 'qa'
         params['num_tokens_to_predict'] = 1
 
         def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            table_info = ""
+            with open("data/geography/geography-fields.txt", "r") as f:
+                data = f.readlines()
+                table_info = ''.join(data)
             q_prefix = params["q_prefix"]
             a_prefix = params["a_prefix"]
 
             prompt = params['prompt_prefix']
+            # prompt += table_info
             for x, y in zip(train_sentences, train_labels):
                 prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
                 prompt += "\n\n"
 
             if test_label_option is None:
-                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"[:-1]
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"
             else:
-                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"[:-1] + test_label_option
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}" + test_label_option
             return prompt
 
+        def execute_func(sql):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection('data/geography/geography-db.added-in-2020.sqlite')
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
         params['prompt_func'] = prompt_func
+        params['execute_func'] = execute_func
+
+    elif params['dataset'] == 'cmput291':
+        orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels, tag_map = load_cmput291()
+        params['prompt_prefix'] = ""
+        params["q_prefix"] = "-- "
+        params["a_prefix"] = ""
+        params['num_user_input'] = 2
+        params['task_format'] = 'qa'
+        params['num_tokens_to_predict'] = 1
+
+        def read_prompt(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            rt = ""
+            q_prefix = params["q_prefix"]
+            a_prefix = params["a_prefix"]
+            tags = set(tag_map[test_sentence])
+            with open("data/cmput291/prompt.json", "r") as f:
+                jd = json.load(f)
+                for prompt in jd:
+                    for one_prompt in prompt['prompts']:
+                        prompt_tags = set(one_prompt['tags'])
+                        if tags.issubset(prompt_tags):
+                            rt += '# Database definition\n'
+                            for ct in one_prompt['prompt_create_table']:
+                                rt += '# '
+                                rt += ct
+                                rt += '\n'
+                            rt += '# join relations\n'
+                            for ct in one_prompt['prompt_join_relations']:
+                                rt += '# '
+                                rt += ct
+                                rt += '\n'
+                            rt += '-- Using valid SQLite, answer the following questions for the tables provided above.\n'
+                            for q_a in one_prompt['q_a']:
+                                x = q_a['question']
+                                y = q_a['query']
+                                rt += f"# {q_prefix}{x}\n{a_prefix}{y}\n"
+                    rt += '# Database definition\n'
+                    for ct in prompt['create_table']:
+                        rt += '# '
+                        rt += ct
+                        rt += '\n'
+                    rt += '# join relations\n'
+                    for ct in prompt['join_relations_desc']:
+                        rt += '# '
+                        rt += ct
+                        rt += '\n'
+            return rt
+
+        def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            table_info = read_prompt(params, train_sentences, train_labels, test_sentence)
+            # with open("data/cmput291/cmput291_createtable.txt", "r") as f:
+            #     data = f.readlines()
+            #     table_info = ''.join(data)
+            q_prefix = params["q_prefix"]
+            a_prefix = params["a_prefix"]
+
+            prompt = params['prompt_prefix']
+            prompt += table_info
+            # for x, y in zip(train_sentences, train_labels):
+            #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+            #     prompt += "\n\n"
+            prompt += '-- Using valid SQLite, answer the following questions for the tables provided above.\n'
+            if test_label_option is None:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"
+            else:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}" + test_label_option
+            return prompt
+
+        def execute_func(sql):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection('data/cmput291/cmput291.sqlite')
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
+        params['prompt_func'] = prompt_func
+        params['execute_func'] = execute_func
     else:
         raise NotImplementedError
     return orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels

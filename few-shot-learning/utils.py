@@ -7,7 +7,7 @@ import torch
 import pickle
 import openai
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
-from transformers import AutoModelWithLMHead, AutoTokenizer
+from transformers import AutoModelWithLMHead, AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
@@ -30,6 +30,8 @@ def chunk_size_helper(params):
         if 'gpt2' in params['model']:
             return 1
         elif 't5' in params['model']:
+            return 20
+        elif 'code' in params['model']:
             return 20
         else:
             assert params['model'] in ['ada', 'babbage', 'curie', 'davinci', 'ada-beta', 'babbage-beta', 'curie-beta', 'davinci-beta']
@@ -82,7 +84,7 @@ def complete_gpt2(prompt, l=10, model_name='gpt2-xl', num_log_probs=None, echo=F
     if l > 0:
         # the generate function can handle left padded inputs automatically in HF
         # total_sequences is now the input + possible generated output
-        total_sequences = gpt2_model.generate(input_ids=input_ids['input_ids'].cuda(), attention_mask=input_ids['attention_mask'].cuda(), max_length=l + len(input_ids['input_ids'][0]), do_sample=False)
+        total_sequences = gpt2_model.generate(input_ids=input_ids['input_ids'].cuda(), attention_mask=input_ids['attention_mask'].cuda(), max_length=1024, do_sample=False)
     else:
         assert echo == True and l == 0
         total_sequences = input_ids['input_ids'].cuda()
@@ -178,22 +180,78 @@ def complete_gpt3(prompt, l, model_name, temp=0, num_log_probs=None, echo=False,
             time.sleep(1)
     return response
 
+def complete_codex(prompt, l, model_name, temp=0, num_log_probs=10, top_p = 1, echo=False, n=None):
+    # call GPT-3 API until result is provided and then return it
+    response = None
+    received = False
+    while not received:
+        try:
+            response = openai.Completion.create(engine=model_name, prompt=prompt, max_tokens=l, temperature=temp,
+                                                logprobs=num_log_probs, echo=echo, stop='\n', n=n, top_p = top_p, best_of = 1)
+            received = True
+        except:
+            error = sys.exc_info()[0]
+            if error == openai.error.InvalidRequestError: # something is wrong: e.g. prompt too long
+                print(f"InvalidRequestError\nPrompt passed in:\n\n{prompt}\n\n")
+                assert False
+
+            print("API error:", error)
+            time.sleep(1)
+    return response
+
 def complete_t5(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None):
     # call GPT-3 API until result is provided and then return it
     tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL")
     model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL")
 
-    def get_sql(query):
-        features = tokenizer('\n'.join(prompt), return_tensors='pt')
+    result = []
+    for single_prompt in prompt:
+        tokenizer.sep_token = '<sep>'
+        features = tokenizer(single_prompt, return_tensors='pt', max_length=20480, truncation=True)
 
         output = model.generate(input_ids=features['input_ids'], 
-                    attention_mask=features['attention_mask'], max_length = 100)
+                    attention_mask=features['attention_mask'], max_length = 1024, early_stopping=True, num_beams=10, num_return_sequences=3, no_repeat_ngram_size=2)
         
-        return tokenizer.decode(output[0])
+        result.append(tokenizer.decode(output[0], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[1], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[2], skip_special_tokens=True))
+    return result
 
-    query = "How many models were finetuned using BERT as base model?"
+def complete_t5_base(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None):
+    # call GPT-3 API until result is provided and then return it
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    model = AutoModelWithLMHead.from_pretrained("t5-base")
 
-    return get_sql(query)
+    result = []
+    for single_prompt in prompt:
+        tokenizer.sep_token = '<sep>'
+        features = tokenizer(single_prompt, return_tensors='pt', max_length=20480, truncation=True)
+
+        output = model.generate(input_ids=features['input_ids'], 
+                    attention_mask=features['attention_mask'], max_length = 1024, early_stopping=True, num_beams=10, num_return_sequences=3, no_repeat_ngram_size=2)
+        
+        result.append(tokenizer.decode(output[0], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[1], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[2], skip_special_tokens=True))
+    return result
+
+def complete_t5_picard(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None):
+    # call GPT-3 API until result is provided and then return it
+    tokenizer = AutoTokenizer.from_pretrained("tscholak/cxmefzzi")
+    model = AutoModelForSeq2SeqLM.from_pretrained("tscholak/cxmefzzi")
+
+    result = []
+    for single_prompt in prompt:
+        tokenizer.sep_token = '<sep>'
+        features = tokenizer(single_prompt, return_tensors='pt', max_length=20480, truncation=True)
+
+        output = model.generate(input_ids=features['input_ids'], 
+                    attention_mask=features['attention_mask'], max_length = 1024, early_stopping=True, num_beams=10, num_return_sequences=3, no_repeat_ngram_size=2)
+        
+        result.append(tokenizer.decode(output[0], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[1], skip_special_tokens=True))
+        # result.append(tokenizer.decode(output[2], skip_special_tokens=True))
+    return result
 
 def complete(prompt, l, model, temp=0, num_log_probs=None, echo=False, n=None):
     """complete the prompt using a language model"""
@@ -204,11 +262,18 @@ def complete(prompt, l, model, temp=0, num_log_probs=None, echo=False, n=None):
         assert temp == 0 # unsupported at the moment
         setup_gpt2(model)
         return complete_gpt2(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo)
+    elif 't5-3b' in model:
+        return complete_t5_base(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n)
+    elif 't5-picard' in model:
+        return complete_t5_picard(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n)
     elif 't5' in model:
         return complete_t5(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n)
+    elif 'code' in model:
+        setup_gpt3()
+        return complete_codex(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0.8, top_p=1)
     else:
         setup_gpt3()
-        return complete_gpt3(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n)
+        return complete_gpt3(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0.8)
 
 def construct_prompt(params, train_sentences, train_labels, test_sentence):
     """construct a single prompt to be fed into the model"""
@@ -220,6 +285,8 @@ def construct_prompt(params, train_sentences, train_labels, test_sentence):
     prompt = params["prompt_prefix"]
     q_prefix = params["q_prefix"]
     a_prefix = params["a_prefix"]
+    train_sentences = train_sentences[:1]
+    train_labels = train_labels[:1]
     for s, l in zip(train_sentences, train_labels):
         prompt += q_prefix
         prompt += s + "\n"
@@ -264,7 +331,7 @@ def get_model_response(params, train_sentences, train_labels, test_sentences, re
         prompts = override_prompt
 
     chunked_prompts = list(chunks(prompts, chunk_size_helper(params)))
-    print(f'prompts {chunked_prompts}')
+    # print(f'prompts {chunked_prompts}')
     for chunk_id, test_chunk_prompts in enumerate(chunked_prompts):
         if num_tokens_to_predict_override is not None:
             num_tokens_to_predict = num_tokens_to_predict_override
@@ -276,6 +343,48 @@ def get_model_response(params, train_sentences, train_labels, test_sentences, re
                 all_raw_answers.append(answer)
         else:
             all_raw_answers.append(resp)
+    if return_all_prompts:
+        return all_raw_answers, prompts
+    else:
+        return all_raw_answers
+
+def get_model_response_text(params, train_sentences, train_labels, test_sentences, return_all_prompts=False,
+                       num_tokens_to_predict_override=None, override_prompt=None):
+    """
+    Obtain model's responses on test sentences, given the training examples
+    :param params: parameters for the experiment
+    :param train_sentences: few-shot training sentences
+    :param train_labels: few-shot training labels
+    :param test_sentences: few-shot test sentences
+    :param return_all_prompts: whether to return all the prompts
+    :param num_tokens_to_predict_override: whether to override num token to predict
+    :param override_prompt: whether to override prompt
+    :return: a list of dictionaries
+    """
+    all_raw_answers = []
+
+    # can optionally ignore the normal prompt and feed in a custom prompt (used for contextual calibration)
+    if override_prompt is None:
+        prompts = []
+        for test_sentence in test_sentences:
+            prompts.append(construct_prompt(params, train_sentences, train_labels, test_sentence))
+    else:
+        prompts = override_prompt
+
+    chunked_prompts = list(chunks(prompts, chunk_size_helper(params)))
+    # print(f'prompts {chunked_prompts}')
+    for chunk_id, test_chunk_prompts in enumerate(chunked_prompts):
+        if num_tokens_to_predict_override is not None:
+            num_tokens_to_predict = num_tokens_to_predict_override
+        else:
+            num_tokens_to_predict = params['num_tokens_to_predict']
+        resp = complete(test_chunk_prompts, num_tokens_to_predict, params['model'], num_log_probs=params['api_num_log_prob'])
+        if 't5' not in params['model']:
+            for answer_id, answer in enumerate(resp['choices']):
+                all_raw_answers.append(answer['text'])
+        else:
+            for res in resp:
+                all_raw_answers.append(res)
     if return_all_prompts:
         return all_raw_answers, prompts
     else:

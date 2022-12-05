@@ -3,6 +3,8 @@ from collections import defaultdict
 
 from data_utils import load_dataset
 from utils import *
+import sqlparse
+import sqlvalidator
 
 def main(models, datasets, all_shots, num_seeds, subsample_test_set, api_num_log_prob, bs, use_saved_results):
     """
@@ -152,7 +154,7 @@ def save_results(params_list, freeze_test_set=True):
         
         for i in range(len(all_reweighted_ans)):
             all_reweighted_ans[i] += all_responses_greedy[i]['text']
-        print(f'step3 answers: {all_reweighted_ans}')
+        # print(f'step3 answers: {all_reweighted_ans}')
 
         ### Get accuracy
         all_orig_ans = [ans.strip() for ans in all_orig_ans]
@@ -163,6 +165,19 @@ def save_results(params_list, freeze_test_set=True):
         accuracies = [orig_accuracy, reweighted_accuracy]
         print(f"accuracies {accuracies}")
 
+        # org_va_accuracy = valid_sql_accuracy_helper(all_orig_ans, test_labels)
+        # reweighted_va_accuracy = valid_sql_accuracy_helper(all_reweighted_ans, test_labels)
+        # va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
+        # print(f"va_accuracies {va_accuracies}")
+
+        org_ex_accuracy, org_va_accuracy = execution_accuracy_helper(params, all_orig_ans, test_labels)
+        reweighted_ex_accuracy, reweighted_va_accuracy = execution_accuracy_helper(params, all_reweighted_ans, test_labels)
+
+        va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
+        print(f"va_accuracies {va_accuracies}")
+
+        ex_accuracies = [org_ex_accuracy, reweighted_ex_accuracy]
+        print(f"ex_accuracies {ex_accuracies}")
 
         # add to result_tree
         keys = [params['dataset'], params['model'], params['num_shots']]
@@ -191,6 +206,8 @@ def save_results(params_list, freeze_test_set=True):
         result_to_save['accuracies'] = accuracies
         if 'prompt_func' in result_to_save['params'].keys():
             params_to_save['prompt_func'] = None
+        if 'execute_func' in result_to_save['params'].keys():
+            params_to_save['execute_func'] = None
         save_pickle(params, result_to_save)
 
 def em_accuracy_helper(prediction, label):
@@ -203,6 +220,31 @@ def em_accuracy_helper(prediction, label):
             correctness_list.append(0)
     return np.mean(correctness_list)
 
+def valid_sql_accuracy_helper(prediction, label):
+    correctness_list = []
+    for sql in prediction:
+        sql_query = sqlvalidator.parse(sql)
+        if sql_query.validated:
+            correctness_list.append(1)
+        else:
+            correctness_list.append(0)
+    return np.mean(correctness_list)
+
+def execution_accuracy_helper(params, prediction, label):
+    correctness_list = []
+    va_list = []
+    for pred, l in zip(prediction, label):
+        try:
+            p_result = params['execute_func'](pred)
+            gt_result = params['execute_func'](l)
+            va_list.append(1)
+            if p_result == gt_result:
+                correctness_list.append(1)
+            else:
+                correctness_list.append(0)
+        except Exception as e:
+            va_list.append(0)
+    return np.mean(correctness_list), np.mean(va_list)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
