@@ -748,7 +748,7 @@ def load_dataset(params):
             a_prefix = params["a_prefix"]
 
             prompt = params['prompt_prefix']
-            prompt += table_info
+            # prompt += table_info
             # for x, y in zip(train_sentences, train_labels):
             #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
             #     prompt += "\n\n"
