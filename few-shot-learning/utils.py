@@ -78,7 +78,7 @@ def complete_gpt2(prompt, l=10, model_name='gpt2-xl', num_log_probs=None, echo=F
      provided by the OpenAI API. '''
     if isinstance(prompt, str):
         prompt = [prompt] # the code below assumes a list
-    input_ids = gpt2_tokenizer.batch_encode_plus(prompt, return_tensors="pt", padding=True)
+    input_ids = gpt2_tokenizer.batch_encode_plus(prompt, return_tensors="pt", padding=True, max_length=4096)
     
     # greedily generate l tokens
     if l > 0:
