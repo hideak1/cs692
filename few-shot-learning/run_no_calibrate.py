@@ -6,6 +6,7 @@ from utils import *
 import sqlparse
 import sqlvalidator
 import time
+import random
 
 def main(models, datasets, all_shots, num_seeds, subsample_test_set, api_num_log_prob, bs, use_saved_results):
     """
@@ -51,12 +52,15 @@ def save_results(params_list, freeze_test_set=True):
 
         ### load data
         all_train_sentences, all_train_labels, all_test_sentences, all_test_labels = load_dataset(params)
+
+
         
         max_length = 100 if len(all_test_sentences) > 100 else len(all_test_sentences)
-
+        r_list = random.sample(range(len(all_test_sentences)), 11)
+        print(f'random list {r_list}')
         gt_labels = []
         result_sql = []
-        for idx in range(max_length):
+        for idx in r_list:
             test_sentences = [all_test_sentences[idx]]
             test_labels = [all_test_labels[idx]]
             gt_labels.append(all_test_labels[idx])
@@ -115,7 +119,7 @@ def save_results(params_list, freeze_test_set=True):
             #     params_to_save['execute_func'] = None
             # save_pickle(params, result_to_save)
             if not 't5' in params['model']: 
-                time.sleep(10)
+                time.sleep(30)
         orig_accuracy = em_accuracy_helper(result_sql, gt_labels)
         accuracies = [orig_accuracy]
         em_a_list.append(orig_accuracy)

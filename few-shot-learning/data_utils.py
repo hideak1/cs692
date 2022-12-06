@@ -382,6 +382,38 @@ def load_geography():
 
     return train_questions, train_answers, test_questions, test_answers
 
+def load_spider():
+    train_data_with_id = []
+    train_sentences = []
+    train_labels = []
+    with open("data/spider/train_spider.json", "r") as f:
+        jd = json.load(f)
+        for myjson in jd:
+            query = myjson['query']
+            question = myjson['question']
+            db_id = myjson['db_id']
+            train_sentences.append(question)
+            train_labels.append(query)
+            train_data_with_id.append({
+                'query': query,
+                'question': question,
+                'db_id': db_id
+            })
+    with open("data/spider/train_others.json", "r") as f:
+        jd = json.load(f)
+        for myjson in jd:
+            query = myjson['query']
+            question = myjson['question']
+            db_id = myjson['db_id']
+            train_sentences.append(question)
+            train_labels.append(query)
+            train_data_with_id.append({
+                'query': query,
+                'question': question,
+                'db_id': db_id
+            })
+    return train_data_with_id, train_sentences, train_labels
+
 def load_cmput291():
     train_questions = []
     train_answers = []
@@ -675,7 +707,7 @@ def load_dataset(params):
             prompt = params['prompt_prefix']
 
             prompt += table_info
-            
+
             for x, y in zip(prompt_map['questions'], prompt_map['answers']):
                 prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
                 prompt += "\n\n"
@@ -689,6 +721,88 @@ def load_dataset(params):
             else:
                 prompt += f"{q_prefix}{test_sentence}\n{a_prefix}" + test_label_option
             return prompt
+
+        def execute_func(sql):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection('data/geography/geography-db.added-in-2020.sqlite')
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
+        params['prompt_func'] = prompt_func
+        params['execute_func'] = execute_func
+
+    elif params['dataset'] == 'geography-spider':
+        train_data, train_sentences, train_labels = load_spider()
+        orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels = load_geography()
+        orig_train_sentences, orig_train_labels = train_sentences, train_labels
+        params['prompt_prefix'] = ""
+        params["q_prefix"] = "QUESTION: "
+        params["a_prefix"] = "ANSWER:"
+        params['num_user_input'] = 2
+        params['task_format'] = 'qa'
+        params['num_tokens_to_predict'] = 1
+
+        def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            # candidate_map = {
+            #     "questions": train_sentences,
+            #     "answers": train_labels
+            # }
+            # prompt_map = similarity.find_topn(candidate_map, test_sentence, 4)
+            prompt = params['prompt_prefix']
+            q_prefix = params["q_prefix"]
+            a_prefix = params["a_prefix"]
+
+            candidate_map = {
+                "db_id": [ item['db_id'] for item in train_data],
+                "questions": [ item['question'] for item in train_data],
+                "answers": [ item['query'] for item in train_data]
+            }
+            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 4)
+            
+            db_id = prompt_map['db_id']
+
+            all_ddl = get_all_ddl(db_id)
+            prompt += '\n'.join([ddl[0].replace('\n', '').replace('"', '').replace('`','') for ddl in all_ddl])
+            prompt += '\n'
+            
+            for x, y in zip(prompt_map['questions'], prompt_map['answers']):
+                prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+                prompt += "\n\n"
+
+            table_info = ""
+            with open("data/geography/schema.sql", "r") as f:
+                data = f.readlines()
+                table_info = ''.join(data)
+            
+
+            prompt += table_info
+
+            # for x, y in zip(train_sentences, train_labels):
+            #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+            #     prompt += "\n\n"
+
+            if test_label_option is None:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"
+            else:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}" + test_label_option
+            return prompt
+
+        def get_all_ddl(db_id):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection(f'data/spider/database/{db_id}/{db_id}.sqlite')
+            cursor = connection.cursor()
+            cursor.execute("select sql from sqlite_master where type = 'table';")
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
 
         def execute_func(sql):
             def get_connection(db_file: str):
@@ -784,6 +898,93 @@ def load_dataset(params):
             return results
         params['prompt_func'] = prompt_func
         params['execute_func'] = execute_func
+
+    elif params['dataset'] == 'cmput291-spider':
+        train_data, train_sentences, train_labels = load_spider()
+        orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels, tag_map = load_cmput291()
+        orig_train_sentences, orig_train_labels = train_sentences, train_labels
+        params['prompt_prefix'] = ""
+        params["q_prefix"] = "QUESTION: "
+        params["a_prefix"] = "ANSWER:"
+        params['num_user_input'] = 2
+        params['task_format'] = 'qa'
+        params['num_tokens_to_predict'] = 1
+
+        def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            # candidate_map = {
+            #     "questions": train_sentences,
+            #     "answers": train_labels
+            # }
+            # prompt_map = similarity.find_topn(candidate_map, test_sentence, 4)
+            prompt = params['prompt_prefix']
+            q_prefix = params["q_prefix"]
+            a_prefix = params["a_prefix"]
+            
+            candidate_map = {
+                "db_id": [ item['db_id'] for item in train_data],
+                "questions": [ item['question'] for item in train_data],
+                "answers": [ item['query'] for item in train_data]
+            }
+            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 4)
+            
+            db_id = prompt_map['db_id']
+
+            all_ddl = get_all_ddl(db_id)
+            prompt += '\n'.join([ddl[0].replace('\n', '').replace('"', '').replace('`','') for ddl in all_ddl])
+            prompt += '\n'
+            
+            for x, y in zip(prompt_map['questions'], prompt_map['answers']):
+                prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+                prompt += "\n\n"
+
+            tables = ["CREATE TABLE users (uid char(4), name text, PRIMARY KEY (uid));",
+            "CREATE TABLE songs (sid int, title text, duration int, PRIMARY KEY (sid));",
+            "CREATE TABLE sessions (uid char(4), sno int, start date, end date, PRIMARY KEY (uid, sno), FOREIGN KEY (uid) REFERENCES users(uid));",
+            "CREATE TABLE listen (uid char(4), sno int, sid int, cnt real, PRIMARY KEY (uid, sno, sid), FOREIGN KEY (uid) REFERENCES users(uid), FOREIGN KEY (uid, sno) REFERENCES sessions(uid, sno), FOREIGN KEY (sid) REFERENCES songs(sid));",
+            "CREATE TABLE playlists (pid int, title text, uid char(4), PRIMARY KEY (pid), FOREIGN KEY (uid) REFERENCES users(uid));",
+            "CREATE TABLE plinclude (pid int, sid int, sorder int, PRIMARY KEY (pid, sid), FOREIGN KEY (pid) REFERENCES playlists(pid), FOREIGN KEY (sid) REFERENCES songs(sid));",
+            "CREATE TABLE artists (aid char(4), name text, nationality text, PRIMARY KEY (aid));",
+            "CREATE TABLE perform (aid char(4), sid int, PRIMARY KEY (aid, sid), FOREIGN KEY (aid) REFERENCES artists(aid), FOREIGN KEY (sid) REFERENCES songs(sid));"]
+            table_info = '\n'.join(tables)
+        
+            prompt += table_info
+
+            # for x, y in zip(train_sentences, train_labels):
+            #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+            #     prompt += "\n\n"
+
+            if test_label_option is None:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"
+            else:
+                prompt += f"{q_prefix}{test_sentence}\n{a_prefix}" + test_label_option
+            return prompt
+
+        def get_all_ddl(db_id):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection(f'data/spider/database/{db_id}/{db_id}.sqlite')
+            cursor = connection.cursor()
+            cursor.execute("select sql from sqlite_master where type = 'table';")
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
+
+        def execute_func(sql):
+            def get_connection(db_file: str):
+                conn = sqlite3.connect(db_file)
+                return conn
+            connection = get_connection('data/cmput291/cmput291.sqlite')
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            print("Result: ", results)
+            connection.close()
+            return results
+        params['prompt_func'] = prompt_func
+        params['execute_func'] = execute_func
+
     else:
         raise NotImplementedError
     return orig_train_sentences, orig_train_labels, orig_test_sentences, orig_test_labels
