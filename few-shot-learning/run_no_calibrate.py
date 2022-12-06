@@ -51,10 +51,15 @@ def save_results(params_list, freeze_test_set=True):
 
         ### load data
         all_train_sentences, all_train_labels, all_test_sentences, all_test_labels = load_dataset(params)
+        
+        max_length = 100 if len(all_test_sentences) > 100 else len(all_test_sentences)
 
-        for idx in range(len(all_test_sentences)):
+        gt_labels = []
+        result_sql = []
+        for idx in range(max_length):
             test_sentences = [all_test_sentences[idx]]
             test_labels = [all_test_labels[idx]]
+            gt_labels.append(all_test_labels[idx])
             # ### sample test set
             # if params['subsample_test_set'] is None:
             #     test_sentences, test_labels = all_test_sentences, all_test_labels
@@ -73,7 +78,7 @@ def save_results(params_list, freeze_test_set=True):
             train_sentences, train_labels = [], []
 
             ### Get model's original answers
-            all_orig_ans, all_prompts_orig = get_model_response_text(params, train_sentences, train_labels, test_sentences,
+            all_orig_ans, all_prompts_orig = get_model_response_text(params, all_train_sentences, all_train_labels, test_sentences,
                                                             return_all_prompts=True, num_tokens_to_predict_override=1024)
             # print(f'step1 answers: {all_orig_ans}')
             ### Get contextual-calibrated answer (first token)
@@ -81,55 +86,55 @@ def save_results(params_list, freeze_test_set=True):
 
             ### Get accuracy
             all_orig_ans = [ans.strip() for ans in all_orig_ans]
+            result_sql.append(all_orig_ans[0])
 
-            orig_accuracy = em_accuracy_helper(all_orig_ans, test_labels)
-            accuracies = [orig_accuracy]
-            em_a_list.append(orig_accuracy)
-            print(f"accuracies {accuracies}")
-
-            # org_va_accuracy = valid_sql_accuracy_helper(all_orig_ans, test_labels)
-            # reweighted_va_accuracy = valid_sql_accuracy_helper(all_reweighted_ans, test_labels)
-            # va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
-            # print(f"va_accuracies {va_accuracies}")
-
-            org_ex_accuracy, org_va_accuracy = execution_accuracy_helper(params, all_orig_ans, test_labels)
-
-            va_accuracies = [org_va_accuracy]
-            va_a_list.append(org_va_accuracy)
-            print(f"va_accuracies {va_accuracies}")
-
-            ex_accuracies = [org_ex_accuracy]
-            ex_a_list.append(org_ex_accuracy)
-            print(f"ex_accuracies {ex_accuracies}")
-
-            # add to result_tree
-            keys = [params['dataset'], params['model'], params['num_shots']]
-            node = result_tree # root
-            for k in keys:
-                if not (k in node.keys()):
-                    node[k] = dict()
-                node = node[k]
-            node[params['seed']] = accuracies
+            # # add to result_tree
+            # keys = [params['dataset'], params['model'], params['num_shots']]
+            # node = result_tree # root
+            # for k in keys:
+            #     if not (k in node.keys()):
+            #         node[k] = dict()
+            #     node = node[k]
+            # node[params['seed']] = accuracies
 
 
-            ### savings
-            result_to_save = dict()
-            params_to_save = deepcopy(params)
-            result_to_save['params'] = params_to_save
-            result_to_save['train_sentences'] = train_sentences
-            result_to_save['train_labels'] = train_labels
-            result_to_save['test_sentences'] = test_sentences
-            result_to_save['test_labels'] = test_labels
-            result_to_save['all_prompts_orig'] = all_prompts_orig
-            result_to_save['all_orig_ans'] = all_orig_ans
-            result_to_save['accuracies'] = accuracies
-            if 'prompt_func' in result_to_save['params'].keys():
-                params_to_save['prompt_func'] = None
-            if 'execute_func' in result_to_save['params'].keys():
-                params_to_save['execute_func'] = None
+            # ### savings
+            # result_to_save = dict()
+            # params_to_save = deepcopy(params)
+            # result_to_save['params'] = params_to_save
+            # result_to_save['train_sentences'] = train_sentences
+            # result_to_save['train_labels'] = train_labels
+            # result_to_save['test_sentences'] = test_sentences
+            # result_to_save['test_labels'] = test_labels
+            # result_to_save['all_prompts_orig'] = all_prompts_orig
+            # result_to_save['all_orig_ans'] = all_orig_ans
+            # result_to_save['accuracies'] = accuracies
+            # if 'prompt_func' in result_to_save['params'].keys():
+            #     params_to_save['prompt_func'] = None
+            # if 'execute_func' in result_to_save['params'].keys():
+            #     params_to_save['execute_func'] = None
             # save_pickle(params, result_to_save)
             if not 't5' in params['model']: 
-                time.sleep(30)
+                time.sleep(10)
+        orig_accuracy = em_accuracy_helper(result_sql, gt_labels)
+        accuracies = [orig_accuracy]
+        em_a_list.append(orig_accuracy)
+        print(f"accuracies {accuracies}")
+
+        # org_va_accuracy = valid_sql_accuracy_helper(all_orig_ans, test_labels)
+        # reweighted_va_accuracy = valid_sql_accuracy_helper(all_reweighted_ans, test_labels)
+        # va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
+        # print(f"va_accuracies {va_accuracies}")
+
+        org_ex_accuracy, org_va_accuracy = execution_accuracy_helper(params, result_sql, gt_labels)
+
+        va_accuracies = [org_va_accuracy]
+        va_a_list.append(org_va_accuracy)
+        print(f"va_accuracies {va_accuracies}")
+
+        ex_accuracies = [org_ex_accuracy]
+        ex_a_list.append(org_ex_accuracy)
+        print(f"ex_accuracies {ex_accuracies}")
     
     print(f'EM: {em_a_list} avg: {np.mean(em_a_list)}')
     print(f'EX: {ex_a_list} avg: {np.mean(ex_a_list)}')

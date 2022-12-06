@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 from utils import ROOT_DIR
 import sqlite3
-
+import similarity
 
 def load_sst2():
     def process_raw_data_sst(lines):
@@ -659,18 +659,30 @@ def load_dataset(params):
         params['num_tokens_to_predict'] = 1
 
         def prompt_func(params, train_sentences, train_labels, test_sentence, test_label_option=None):
+            candidate_map = {
+                "questions": train_sentences,
+                "answers": train_labels
+            }
+            prompt_map = similarity.find_topn(candidate_map, test_sentence, 5)
+
             table_info = ""
-            with open("data/geography/geography-fields.txt", "r") as f:
+            with open("data/geography/schema.sql", "r") as f:
                 data = f.readlines()
                 table_info = ''.join(data)
             q_prefix = params["q_prefix"]
             a_prefix = params["a_prefix"]
 
             prompt = params['prompt_prefix']
-            # prompt += table_info
-            for x, y in zip(train_sentences, train_labels):
+
+            prompt += table_info
+            
+            for x, y in zip(prompt_map['questions'], prompt_map['answers']):
                 prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
                 prompt += "\n\n"
+
+            # for x, y in zip(train_sentences, train_labels):
+            #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
+            #     prompt += "\n\n"
 
             if test_label_option is None:
                 prompt += f"{q_prefix}{test_sentence}\n{a_prefix}"
