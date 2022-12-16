@@ -695,7 +695,7 @@ def load_dataset(params):
                 "questions": train_sentences,
                 "answers": train_labels
             }
-            prompt_map = similarity.find_topn(candidate_map, test_sentence, 5)
+            prompt_map = similarity.find_topn(candidate_map, test_sentence, 8)
 
             table_info = ""
             with open("data/geography/schema.sql", "r") as f:
@@ -730,7 +730,7 @@ def load_dataset(params):
             cursor = connection.cursor()
             cursor.execute(sql)
             results = cursor.fetchall()
-            print("Result: ", results)
+            # print("Result: ", results)
             connection.close()
             return results
         params['prompt_func'] = prompt_func
@@ -752,7 +752,7 @@ def load_dataset(params):
             #     "questions": train_sentences,
             #     "answers": train_labels
             # }
-            # prompt_map = similarity.find_topn(candidate_map, test_sentence, 4)
+            # prompt_map = similarity.find_topn(candidate_map, test_sentence, 2)
             prompt = params['prompt_prefix']
             q_prefix = params["q_prefix"]
             a_prefix = params["a_prefix"]
@@ -762,7 +762,7 @@ def load_dataset(params):
                 "questions": [ item['question'] for item in train_data],
                 "answers": [ item['query'] for item in train_data]
             }
-            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 4)
+            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 8)
             
             db_id = prompt_map['db_id']
 
@@ -849,10 +849,14 @@ def load_dataset(params):
                                 rt += ct
                                 rt += '\n'
                             rt += '-- Using valid SQLite, answer the following questions for the tables provided above.\n'
+                            q_n = 0
                             for q_a in one_prompt['q_a']:
                                 x = q_a['question']
                                 y = q_a['query']
                                 rt += f"# {q_prefix}{x}\n{a_prefix}{y}\n"
+                                q_n += 1
+                                if q_n >= 3:
+                                    break
                     rt += '# Database definition\n'
                     for ct in prompt['create_table']:
                         rt += '# '
@@ -893,7 +897,7 @@ def load_dataset(params):
             cursor = connection.cursor()
             cursor.execute(sql)
             results = cursor.fetchall()
-            print("Result: ", results)
+            # print("Result: ", results)
             connection.close()
             return results
         params['prompt_func'] = prompt_func
@@ -925,7 +929,7 @@ def load_dataset(params):
                 "questions": [ item['question'] for item in train_data],
                 "answers": [ item['query'] for item in train_data]
             }
-            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 4)
+            prompt_map = similarity.find_topn_with_sameid(candidate_map, test_sentence, 8)
             
             db_id = prompt_map['db_id']
 

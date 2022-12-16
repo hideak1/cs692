@@ -44,9 +44,7 @@ def save_results(params_list, freeze_test_set=True):
     Save all model's responses and the rest of configs into a pickle file
     """
     result_tree = dict()
-    va_a_list = []
-    ex_a_list = []
-    em_a_list = []
+    
     for param_index, params in enumerate(params_list):
         print("\nExperiment name:", params['expr_name'])
 
@@ -54,95 +52,100 @@ def save_results(params_list, freeze_test_set=True):
         all_train_sentences, all_train_labels, all_test_sentences, all_test_labels = load_dataset(params)
 
 
-        
+        va_a_list = []
+        ex_a_list = []
+        em_a_list = []
         max_length = 100 if len(all_test_sentences) > 100 else len(all_test_sentences)
         r_list = random.sample(range(len(all_test_sentences)), 11)
         print(f'random list {r_list}')
-        gt_labels = []
-        result_sql = []
+        
         for idx in r_list:
-            test_sentences = [all_test_sentences[idx]]
-            test_labels = [all_test_labels[idx]]
-            gt_labels.append(all_test_labels[idx])
-            # ### sample test set
-            # if params['subsample_test_set'] is None:
-            #     test_sentences, test_labels = all_test_sentences, all_test_labels
-            #     print(f"selecting full test set ({len(all_test_labels)} examples)")
-            # else:
-            #     if freeze_test_set:
-            #         np.random.seed(0) # always use seed 0 result if freeze
-            #     else:
-            #         np.random.seed(params['seed'])
-            #     test_sentences, test_labels = random_sampling(all_test_sentences, all_test_labels, params['subsample_test_set'])
-            #     print(f"selecting {len(test_labels)} subsample of test set")
+            gt_labels = []
+            result_sql = []
+            for i in range(1):
+                test_sentences = [all_test_sentences[idx]]
+                test_labels = [all_test_labels[idx]]
+                gt_labels.append(all_test_labels[idx])
+                # ### sample test set
+                # if params['subsample_test_set'] is None:
+                #     test_sentences, test_labels = all_test_sentences, all_test_labels
+                #     print(f"selecting full test set ({len(all_test_labels)} examples)")
+                # else:
+                #     if freeze_test_set:
+                #         np.random.seed(0) # always use seed 0 result if freeze
+                #     else:
+                #         np.random.seed(params['seed'])
+                #     test_sentences, test_labels = random_sampling(all_test_sentences, all_test_labels, params['subsample_test_set'])
+                #     print(f"selecting {len(test_labels)} subsample of test set")
 
-            ### sample few-shot training examples
-            np.random.seed(params['seed'])
-            # train_sentences, train_labels = random_sampling(all_train_sentences, all_train_labels, params['num_shots'])
-            train_sentences, train_labels = [], []
+                ### sample few-shot training examples
+                np.random.seed(params['seed'])
+                # train_sentences, train_labels = random_sampling(all_train_sentences, all_train_labels, params['num_shots'])
+                train_sentences, train_labels = [], []
 
-            ### Get model's original answers
-            all_orig_ans, all_prompts_orig = get_model_response_text(params, all_train_sentences, all_train_labels, test_sentences,
-                                                            return_all_prompts=True, num_tokens_to_predict_override=1024)
-            # print(f'step1 answers: {all_orig_ans}')
-            ### Get contextual-calibrated answer (first token)
-            # ask model for candidate first token, for each of the test sentence
+                ### Get model's original answers
+                all_orig_ans, all_prompts_orig = get_model_response_text(params, all_train_sentences, all_train_labels, test_sentences,
+                                                                return_all_prompts=True, num_tokens_to_predict_override=1024)
+                # print(f'step1 answers: {all_orig_ans}')
+                ### Get contextual-calibrated answer (first token)
+                # ask model for candidate first token, for each of the test sentence
 
-            ### Get accuracy
-            all_orig_ans = [ans.strip() for ans in all_orig_ans]
-            result_sql.append(all_orig_ans[0])
+                ### Get accuracy
+                all_orig_ans = [ans.strip() for ans in all_orig_ans]
+                result_sql.append(all_orig_ans[0])
 
-            # # add to result_tree
-            # keys = [params['dataset'], params['model'], params['num_shots']]
-            # node = result_tree # root
-            # for k in keys:
-            #     if not (k in node.keys()):
-            #         node[k] = dict()
-            #     node = node[k]
-            # node[params['seed']] = accuracies
+                # # add to result_tree
+                # keys = [params['dataset'], params['model'], params['num_shots']]
+                # node = result_tree # root
+                # for k in keys:
+                #     if not (k in node.keys()):
+                #         node[k] = dict()
+                #     node = node[k]
+                # node[params['seed']] = accuracies
 
 
-            # ### savings
-            # result_to_save = dict()
-            # params_to_save = deepcopy(params)
-            # result_to_save['params'] = params_to_save
-            # result_to_save['train_sentences'] = train_sentences
-            # result_to_save['train_labels'] = train_labels
-            # result_to_save['test_sentences'] = test_sentences
-            # result_to_save['test_labels'] = test_labels
-            # result_to_save['all_prompts_orig'] = all_prompts_orig
-            # result_to_save['all_orig_ans'] = all_orig_ans
-            # result_to_save['accuracies'] = accuracies
-            # if 'prompt_func' in result_to_save['params'].keys():
-            #     params_to_save['prompt_func'] = None
-            # if 'execute_func' in result_to_save['params'].keys():
-            #     params_to_save['execute_func'] = None
-            # save_pickle(params, result_to_save)
-            if not 't5' in params['model']: 
-                time.sleep(30)
-        orig_accuracy = em_accuracy_helper(result_sql, gt_labels)
-        accuracies = [orig_accuracy]
-        em_a_list.append(orig_accuracy)
-        print(f"accuracies {accuracies}")
+                # ### savings
+                # result_to_save = dict()
+                # params_to_save = deepcopy(params)
+                # result_to_save['params'] = params_to_save
+                # result_to_save['train_sentences'] = train_sentences
+                # result_to_save['train_labels'] = train_labels
+                # result_to_save['test_sentences'] = test_sentences
+                # result_to_save['test_labels'] = test_labels
+                # result_to_save['all_prompts_orig'] = all_prompts_orig
+                # result_to_save['all_orig_ans'] = all_orig_ans
+                # result_to_save['accuracies'] = accuracies
+                # if 'prompt_func' in result_to_save['params'].keys():
+                #     params_to_save['prompt_func'] = None
+                # if 'execute_func' in result_to_save['params'].keys():
+                #     params_to_save['execute_func'] = None
+                # save_pickle(params, result_to_save)
+                if not 't5' in params['model']: 
+                    time.sleep(30)
+            orig_accuracy = em_accuracy_helper(result_sql, gt_labels)
+            accuracies = [orig_accuracy]
+            em_a_list.append(orig_accuracy)
+            print(f'index {idx}')
+            print(f"accuracies {accuracies}")
 
-        # org_va_accuracy = valid_sql_accuracy_helper(all_orig_ans, test_labels)
-        # reweighted_va_accuracy = valid_sql_accuracy_helper(all_reweighted_ans, test_labels)
-        # va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
-        # print(f"va_accuracies {va_accuracies}")
+            # org_va_accuracy = valid_sql_accuracy_helper(all_orig_ans, test_labels)
+            # reweighted_va_accuracy = valid_sql_accuracy_helper(all_reweighted_ans, test_labels)
+            # va_accuracies = [org_va_accuracy, reweighted_va_accuracy]
+            # print(f"va_accuracies {va_accuracies}")
 
-        org_ex_accuracy, org_va_accuracy = execution_accuracy_helper(params, result_sql, gt_labels)
+            org_ex_accuracy, org_va_accuracy = execution_accuracy_helper(params, result_sql, gt_labels)
 
-        va_accuracies = [org_va_accuracy]
-        va_a_list.append(org_va_accuracy)
-        print(f"va_accuracies {va_accuracies}")
+            va_accuracies = [org_va_accuracy]
+            va_a_list.append(org_va_accuracy)
+            print(f"va_accuracies {va_accuracies}")
 
-        ex_accuracies = [org_ex_accuracy]
-        ex_a_list.append(org_ex_accuracy)
-        print(f"ex_accuracies {ex_accuracies}")
-    
-    print(f'EM: {em_a_list} avg: {np.mean(em_a_list)}')
-    print(f'EX: {ex_a_list} avg: {np.mean(ex_a_list)}')
-    print(f'VA: {va_a_list} avg: {np.mean(va_a_list)}')
+            ex_accuracies = [org_ex_accuracy]
+            ex_a_list.append(org_ex_accuracy)
+            print(f"ex_accuracies {ex_accuracies}")
+        
+        print(f'EM: {em_a_list} avg: {np.mean(em_a_list)}')
+        print(f'EX: {ex_a_list} avg: {np.mean(ex_a_list)}')
+        print(f'VA: {va_a_list} avg: {np.mean(va_a_list)}')
 
 def em_accuracy_helper(prediction, label):
     correctness_list = []
@@ -168,7 +171,7 @@ def execution_accuracy_helper(params, prediction, label):
     correctness_list = []
     va_list = []
     for pred, l in zip(prediction, label):
-        print(f'prediction: {pred} gold: {l}')
+        # print(f'prediction: {pred} gold: {l}')
         try:
             p_result = params['execute_func'](pred)
             gt_result = params['execute_func'](l)

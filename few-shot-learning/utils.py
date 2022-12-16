@@ -34,7 +34,7 @@ def chunk_size_helper(params):
         elif 'code' in params['model']:
             return 20
         else:
-            assert params['model'] in ['ada', 'babbage', 'curie', 'davinci', 'ada-beta', 'babbage-beta', 'curie-beta', 'davinci-beta']
+            assert params['model'] in ['ada', 'babbage', 'curie', 'davinci', 'ada-beta', 'babbage-beta', 'curie-beta', 'davinci-beta', 'text-davinci-003']
             return 20
     else:
         return bs
@@ -162,14 +162,14 @@ def complete_gpt2(prompt, l=10, model_name='gpt2-xl', num_log_probs=None, echo=F
     return_json['choices'] = choices
     return return_json
 
-def complete_gpt3(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None):
+def complete_gpt3(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None, top_p = 1, best_of=1):
     # call GPT-3 API until result is provided and then return it
     response = None
     received = False
     while not received:
         try:
             response = openai.Completion.create(engine=model_name, prompt=prompt, max_tokens=l, temperature=temp,
-                                                logprobs=num_log_probs, echo=echo, stop='\n', n=n)
+                                                logprobs=num_log_probs, echo=echo, stop='\n', n=n, top_p = top_p, best_of = best_of)
             received = True
         except:
             error = sys.exc_info()[0]
@@ -181,23 +181,22 @@ def complete_gpt3(prompt, l, model_name, temp=0, num_log_probs=None, echo=False,
             time.sleep(1)
     return response
 
-def complete_codex(prompt, l, model_name, temp=0, num_log_probs=10, top_p = 1, echo=False, n=None):
+def complete_codex(prompt, l, model_name, temp=0, num_log_probs=10, top_p = 1, echo=False, n=None, best_of=1):
     # call GPT-3 API until result is provided and then return it
     response = None
     received = False
-    while not received:
-        try:
-            response = openai.Completion.create(engine=model_name, prompt=prompt, max_tokens=l, temperature=temp,
-                                                logprobs=num_log_probs, echo=echo, stop='\n', n=n, top_p = top_p, best_of = 1)
-            received = True
-        except:
-            error = sys.exc_info()[0]
-            if error == openai.error.InvalidRequestError: # something is wrong: e.g. prompt too long
-                print(f"InvalidRequestError\nPrompt passed in:\n\n{prompt}\n\n")
-                assert False
+    try:
+        response = openai.Completion.create(engine=model_name, prompt=prompt, max_tokens=l, temperature=temp,
+                                            logprobs=num_log_probs, echo=echo, stop='\n', n=n, top_p = top_p, best_of = best_of)
+        received = True
+    except:
+        error = sys.exc_info()[0]
+        if error == openai.error.InvalidRequestError: # something is wrong: e.g. prompt too long
+            print(f"InvalidRequestError\nPrompt passed in:\n\n{prompt}\n\n")
+            assert False
 
-            print("API error:", error)
-            time.sleep(1)
+        print("API error:", error)
+        time.sleep(1)
     return response
 
 def complete_t5(prompt, l, model_name, temp=0, num_log_probs=None, echo=False, n=None):
@@ -271,10 +270,10 @@ def complete(prompt, l, model, temp=0, num_log_probs=None, echo=False, n=None):
         return complete_t5(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n)
     elif 'code' in model:
         setup_gpt3()
-        return complete_codex(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0.8, top_p=1)
+        return complete_codex(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0.8, top_p=1, best_of = 5)
     else:
         setup_gpt3()
-        return complete_gpt3(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0.8)
+        return complete_gpt3(prompt, l=l, model_name=model, num_log_probs=num_log_probs, echo=echo, n=n, temp=0, top_p=1, best_of = 1)
 
 def construct_prompt(params, train_sentences, train_labels, test_sentence):
     """construct a single prompt to be fed into the model"""
