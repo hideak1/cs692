@@ -781,7 +781,7 @@ def load_dataset(params):
             
 
             prompt += table_info
-
+            prompt += '\n'
             # for x, y in zip(train_sentences, train_labels):
             #     prompt += f"{q_prefix}{x}\n{a_prefix}{y}"
             #     prompt += "\n\n"
